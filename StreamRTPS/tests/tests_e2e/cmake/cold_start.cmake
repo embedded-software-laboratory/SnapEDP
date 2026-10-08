@@ -1,0 +1,29 @@
+add_gossip_test(e2e test_e2e_cold_start test_e2e_cold_start.cpp
+    simultaneous_2
+    simultaneous_3
+    simultaneous_8
+    simultaneous_16
+    simultaneous_32
+    simultaneous_64
+    simultaneous_standard_8
+    simultaneous_standard_32
+    lowest_starts_last_8
+    lowest_starts_last_32
+    lowest_starts_first_8
+    two_waves_16
+    staggered_32
+    profile_N16_lan
+    profile_N16_wifi
+    profile_N16_lossy-5
+    profile_N16_lossy-10
+    profile_N16_lossy-20
+    profile_N16_burst
+    profile_N16_reorder
+    profile_N16_bursty
+    profile_N16_duplicate
+    asymmetric_8
+    endpoint_heavy_0
+    endpoint_heavy_16
+    endpoint_heavy_multi
+    simultaneous_128)
+set_tests_properties(e2e_simultaneous_128 PROPERTIES LABELS "e2e;nightly")

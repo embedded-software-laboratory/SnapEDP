@@ -1,0 +1,3 @@
+add_gossip_unit_test(test_topic_data test_topic_data.cpp streamrtps
+    topic_roundtrip topic_compressed_roundtrip topic_truncated
+    topic_oversized_name topic_unknown_pid_skipped topic_cursor_overrun_tail)

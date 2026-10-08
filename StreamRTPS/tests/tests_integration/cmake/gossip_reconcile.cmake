@@ -1,0 +1,4 @@
+add_gossip_test(integration test_gossip_reconcile test_gossip_reconcile.cpp
+    multi_frame_response multi_frame_frame_lost multi_frame_shrink
+    single_frame_replacement target_unresponsive grace_suppresses_resync
+    in_flight_flag_released sticky_target_cleared)

@@ -1,0 +1,6 @@
+[submodule "tools/Micro-XRCE-DDS-Gen"]
+	path = tools/Micro-XRCE-DDS-Gen
+	url = https://github.com/eProsima/Micro-XRCE-DDS-Gen
+[submodule "thirdparty/Micro-XRCE-DDS-Gen"]
+	path = thirdparty/Micro-XRCE-DDS-Gen
+	url = https://github.com/eProsima/Micro-XRCE-DDS-Gen

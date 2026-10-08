@@ -1,0 +1,7 @@
+add_gossip_test(integration test_gossip_teardown test_gossip_teardown.cpp
+    destroy_state_initial destroy_state_gossip destroy_state_announce
+    destroy_state_discovered destroy_state_reconcile destroy_state_election_probe
+    destroy_mid_resync_requester destroy_mid_resync_responder
+    destroy_with_packets_in_flight destroy_before_complete_init stop_twice
+    endpoint_removed_during_resync
+    reliable_writer_removal_race)

@@ -1,0 +1,34 @@
+add_gossip_unit_test(test_mock_router test_mock_router.cpp streamrtps_mock
+    rtr_zero_model_sync
+    rtr_unicast_routing
+    rtr_multicast_fanout
+    rtr_port_bind_unique
+    rtr_drop_filter_per_receiver
+    rtr_drop_rate_converges
+    rtr_delay_bounds
+    rtr_delay_mean
+    rtr_delay_degenerate
+    rtr_preserve_order_true
+    rtr_reorder_happens
+    rtr_frame_loss_rate
+    rtr_frame_loss_fragments
+    rtr_bitrate_spacing
+    rtr_queue_limit_drops
+    rtr_duplicate_rate
+    rtr_burst_loss_runs
+    rtr_burst_gate
+    rtr_late_tail
+    rtr_blackout_window
+    rtr_per_link_override
+    rtr_asymmetric_link
+    rtr_partition_helpers
+    rtr_corruption
+    rtr_packet_tap
+    rtr_unregister_in_flight_sender
+    rtr_unregister_in_flight_receiver
+    rtr_drain
+    rtr_seed_reproducible
+    rtr_reset_with_live_drivers
+    rtr_concurrent_senders
+    rtr_callback_sends_inline
+)

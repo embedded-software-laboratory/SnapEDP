@@ -1,0 +1,3 @@
+add_gossip_unit_test(test_participant_proxy test_participant_proxy.cpp streamrtps
+    ppd_sedp_support_roundtrip ppd_sedp_support_absent ppd_root_and_hash_roundtrip
+    ppd_gossip_state_roundtrip ppd_lease_clamped ppd_alive_at_boundary ppd_truncated)

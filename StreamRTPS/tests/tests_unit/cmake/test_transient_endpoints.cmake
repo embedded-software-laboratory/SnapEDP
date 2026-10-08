@@ -1,0 +1,4 @@
+add_gossip_unit_test(test_transient_endpoints test_transient_endpoints.cpp streamrtps
+    trn_unicast_destination trn_payload_intact trn_payload_size_limits trn_history_full
+    trn_sent_changes_released trn_remove_reader_of_participant trn_acknack_ignored
+    trn_reader_callback trn_reader_no_callback trn_reader_duplicate trn_reader_remove_writer)

@@ -1,0 +1,66 @@
+import { file_exists } from "std/fs"
+
+main(args) {
+    echo "Executing Strict ReqResp Verification!"
+
+    let current_dir = $ echo \$PWD $ failed {
+        echo "Failed to get current working dir."
+        exit 1
+    }
+    let build_dir = current_dir + "/build/"
+
+    let strict_sender = build_dir + "StrictSender"
+    let strict_responder = build_dir + "StrictResponder"
+    let sender_log = build_dir + "StrictSender.txt"
+    let responder_log = build_dir + "StrictResponder.txt"
+
+    if not file_exists(strict_sender) {
+        echo "StrictSender missing, looking in " + build_dir + " for StrictSender"
+        exit 1
+    }
+
+    if not file_exists(strict_responder) {
+        echo "StrictResponder missing, looking in " + build_dir + " for StrictResponder"
+        exit 1
+    }
+
+    trust $ mkdir -p {build_dir} $
+    trust $ rm -f {sender_log} {responder_log} $
+
+    trust $ {strict_sender} > {sender_log} 2>&1 & $
+    let sender_pid = $ echo \$! $?
+
+    trust $ {strict_responder} > {responder_log} 2>&1 & $
+    let responder_pid = $ echo \$! $?
+
+    $ timeout 70s bash -c "while kill -0 {sender_pid} 2>/dev/null || kill -0 {responder_pid} 2>/dev/null; do sleep 1; done" $ failed {
+        echo "Strict ReqResp verification timed out."
+        $ kill {sender_pid} {responder_pid} >/dev/null 2>&1 $
+        $ sleep 1 $
+        $ kill -9 {sender_pid} {responder_pid} >/dev/null 2>&1 $
+        exit 1
+    }
+
+    $ wait {sender_pid} $ failed {
+        echo "StrictSender exited with failure."
+        exit 1
+    }
+
+    $ wait {responder_pid} $ failed {
+        echo "StrictResponder exited with failure."
+        exit 1
+    }
+
+    $ grep -q "TEST_PASS" {sender_log} $ failed {
+        echo "StrictSender log is missing TEST_PASS marker."
+        exit 1
+    }
+
+    $ grep -q "TEST_PASS" {responder_log} $ failed {
+        echo "StrictResponder log is missing TEST_PASS marker."
+        exit 1
+    }
+
+    echo "Strict ReqResp verification PASSED"
+    exit 0
+}

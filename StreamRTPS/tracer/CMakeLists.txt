@@ -1,0 +1,15 @@
+add_library(soatracer_tp STATIC tracepoints/src/soatracer_tp.cpp)
+target_include_directories(soatracer_tp PUBLIC tracepoints/include)
+target_link_libraries(soatracer_tp PUBLIC LTTng::UST)
+
+macro(add_tracer_node name source)
+  add_executable(${name} ${source})
+  target_include_directories(${name} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+  target_compile_definitions(${name} PRIVATE TRACE_PERF=0 TRACE_ALL=1 TRACE_LOG=0)
+  target_link_libraries(${name} PRIVATE streamrtps pthread soatracer_tp)
+endmacro()
+
+add_tracer_node(soatracer-be-embedded be_embedded_node.cpp)
+add_tracer_node(soatracer-rl-embedded rl_embedded_node.cpp)
+add_tracer_node(soatracer-be-gossip be_gossip_node.cpp)
+add_tracer_node(soatracer-be-baseline be_baseline_node.cpp)

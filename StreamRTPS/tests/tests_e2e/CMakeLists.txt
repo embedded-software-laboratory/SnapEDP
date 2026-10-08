@@ -1,0 +1,5 @@
+include(${PROJECT_SOURCE_DIR}/tests/tests_common/gossip_tests.cmake)
+file(GLOB _e2e_fragments ${CMAKE_CURRENT_SOURCE_DIR}/cmake/*.cmake)
+foreach(f ${_e2e_fragments})
+    include(${f})
+endforeach()

@@ -1,0 +1,2 @@
+add_gossip_unit_test(test_spdp_burst test_spdp_burst.cpp streamrtps
+    spd_phase_intervals spd_phase_boundaries spd_scale_pct spd_steady_state spd_runtime_change)

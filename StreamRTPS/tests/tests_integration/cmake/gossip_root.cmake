@@ -1,0 +1,3 @@
+add_gossip_test(integration test_gossip_root test_gossip_root.cpp
+    root_lowered_by_response root_never_rises dead_root_not_adopted_joiner
+    dead_root_not_adopted_member root_death_takeover rootless_joiner_recovers)

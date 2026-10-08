@@ -1,0 +1,48 @@
+import { file_exists } from "std/fs"
+
+main(args) {
+    
+    echo "Executing Request Response Example!"
+    let current_dir = $ echo \$PWD $ failed {
+        echo "Failed to get current working dir."
+    }
+    let build_dir = current_dir + "/build/"
+
+
+    if not file_exists(build_dir + "Sender"){
+        echo "Sender missing, looking in " + build_dir + " for Sender" 
+        exit 1
+    }
+
+    if not file_exists(build_dir + "Responder"){
+        echo "Responder missing, looking in " + build_dir + " for Responder" 
+        exit 1
+    }
+
+    trust $ mkdir -p {build_dir} $
+    let pcap_tmp = "/tmp/streamrtps_reqresp_record.pcap"
+    let pcap_path = build_dir + "record.pcap"
+
+    sudo $ rm -f {pcap_tmp} $?
+
+    sudo $ tshark -i eno1 -w {pcap_tmp} -q >/dev/null & $ failed {
+        echo "Starting tshark failed."
+    }
+
+    trust $ {build_dir + "Sender"} > {build_dir + "Sender"}.txt & $ 
+    let sender_pid = $ echo \$! $?
+
+    trust $ {build_dir + "Responder"} > {build_dir + "Responder"}.txt & $
+    let responder_pid = $ echo \$! $?
+    
+    // Give them more time to sleep
+    trust $ sleep 15 $
+
+    $kill {sender_pid} >/dev/null 2>&1$?
+    $kill {responder_pid} >/dev/null 2>&1$?
+    sudo $pkill -f "tshark -i lo -w {pcap_tmp}"$?
+    sudo $ chmod a+r {pcap_tmp} $?
+    $ cp {pcap_tmp} {pcap_path} $?
+    echo "Terminated experiment." 
+    exit 0
+}
