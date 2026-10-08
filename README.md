@@ -98,8 +98,7 @@ ctest --output-on-failure
 
 The protocol is described in:
 
-> D. P. Klüner, S. Kowalewski, A. Kampmann. *Snap-EDP: Scalable DDS Endpoint Discovery via Peer-State Transfers.* Manuscript under review; the LaTeX source and all evaluation figures live in the `paper/` directory of the parent SOATracer repository.
-
+> D. P. Klüner, S. Kowalewski, A. Kampmann. *Snap-EDP: Scalable DDS Endpoint Discovery via Peer-State Transfers.* 
 ```bibtex
 @article{kluner2026snapedp,
   title   = {Snap-EDP: Scalable {DDS} Endpoint Discovery via Peer-State Transfers},
