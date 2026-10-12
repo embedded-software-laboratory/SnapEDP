@@ -342,11 +342,284 @@ begin
 end process;
 
 end algorithm; *)
+\* BEGIN TRANSLATION
+VARIABLES pc, Joined, ParticipantState, toAnnounce, PeerRoots, Messages, 
+          pendingResync
+
+(* define statement *)
+isDiscovered(p) == pc[[Type |-> "SEDP", pID |-> p]] = "fsm_discovered"
+
+
+isConfigured(p) == isDiscovered(p) \/ pendingResync[p] # {}
+
+
+newConfiguredParticipants(state) == {p \in Participants : state.participants[p] = "newConf"}
+newUnconfiguredParticipants(state) == {p \in Participants : state.participants[p] = "newUnconf"}
+
+known(state) == {p \in Participants : state.participants[p] # "unknown"}
+
+amLowest(state, self) == \A y \in known(state) \ {self} :
+    state.participants[y] \in {"unconf","newUnconf"} => self <= y
+
+contributionFrom(p) == {p} \cup ParticipantState[p].endpoints
+
+
+hashOK(self, p) == p \in ParticipantState[self].endpoints
+
+
+holes(self) == {q \in Participants :
+    /\ \/ /\ ParticipantState[self].participants[q] \in {"conf","newConf"}
+          /\ PeerRoots[self][q] = ParticipantState[self].root
+       \/ q \in pendingResync[self]
+    /\ q \notin ParticipantState[self].endpoints}
+
+
+Complete(p) == holes(p) = {}
+
+
+gossipServers(self) == {q \in Participants \ {self} :
+    ParticipantState[self].participants[q] \in {"conf","newConf"}}
+
+
+validServers(self) == gossipServers(self)
+
+
+ApplySpdp(cur, disc, rootChanged) ==
+    IF disc THEN IF cur = "newConf" \/ (cur = "conf" /\ ~rootChanged) THEN cur ELSE "newConf"
+            ELSE IF cur \in {"unconf","newUnconf"} THEN cur ELSE "newUnconf"
+
+
+
+changeNeeded(d, s, disc) ==
+    IF disc THEN \/ ParticipantState[d].participants[s] \notin {"conf","newConf"}
+                 \/ PeerRoots[d][s] # ParticipantState[s].root
+            ELSE ParticipantState[d].participants[s] \notin {"unconf","newUnconf"}
+
+
+SpdpMsgs == {m \in Messages : m.type = "spdp"}
+SedpMsgs == {m \in Messages : m.type \in {"ann","sreq","sresp"}}
+SpdpCount == Cardinality(SpdpMsgs)
+SedpCount == Cardinality(SedpMsgs)
+
+
+Overdue == \E m \in Messages : m.age >= MaxAge
+
+AgeAll(M) == { [m EXCEPT !.age = m.age + 1] : m \in M }
+
+
+vars == << pc, Joined, ParticipantState, toAnnounce, PeerRoots, Messages, 
+           pendingResync >>
+
+ProcSet == {[Type |-> "joiner", pID |-> 0]} \cup (SpdpProcs) \cup {[Type |-> "net", pID |-> 0]} \cup (SedpProcs)
+
+Init == (* Global variables *)
+        /\ Joined = {}
+        /\ ParticipantState =                [p \in Participants |->
+                              [root |-> 0,
+                               participants     |-> [q \in Participants |-> "unknown"],
+                               endpoints        |-> {}]]
+        /\ toAnnounce = [p \in Participants |-> {}]
+        /\ PeerRoots = [p \in Participants |-> [q \in Participants |-> 0]]
+        /\ Messages = {}
+        /\ pendingResync = [p \in Participants |-> {}]
+        /\ pc = [self \in ProcSet |-> CASE self = [Type |-> "joiner", pID |-> 0] -> "join"
+                                        [] self \in SpdpProcs -> "spdp_send"
+                                        [] self = [Type |-> "net", pID |-> 0] -> "net_step"
+                                        [] self \in SedpProcs -> "fsm_initial"]
+
+join == /\ pc[[Type |-> "joiner", pID |-> 0]] = "join"
+        /\ ~Overdue /\ Joined # Participants
+        /\ \E p \in Participants \ Joined:
+             /\ ParticipantState' = [ParticipantState EXCEPT ![p] = [ParticipantState[p] EXCEPT !.root = p]]
+             /\ Joined' = (Joined \cup {p})
+        /\ pc' = [pc EXCEPT ![[Type |-> "joiner", pID |-> 0]] = "join"]
+        /\ UNCHANGED << toAnnounce, PeerRoots, Messages, pendingResync >>
+
+joiner == join
+
+spdp_send(self) == /\ pc[self] = "spdp_send"
+                   /\    ~Overdue
+                      /\ self.pID \in Joined
+                      /\ SpdpCount < MaxInflight
+                      /\ \E dst \in (Joined \ {self.pID}) :
+                           /\ changeNeeded(dst, self.pID, isConfigured(self.pID))
+                           /\ ~(\E m \in SpdpMsgs : m.src = self.pID /\ m.dst = dst)
+                   /\ \E dst \in      { d \in (Joined \ {self.pID}) :
+                                 /\ changeNeeded(d, self.pID, isConfigured(self.pID))
+                                 /\ ~(\E m \in SpdpMsgs : m.src = self.pID /\ m.dst = d) }:
+                        Messages' = (        AgeAll(Messages) \cup
+                                     { [type |-> "spdp", src |-> self.pID, dst |-> dst, age |-> 0,
+                                        disc |-> isConfigured(self.pID), rt |-> ParticipantState[self.pID].root, eps |-> {}, view |-> {}] })
+                   /\ pc' = [pc EXCEPT ![self] = "spdp_send"]
+                   /\ UNCHANGED << Joined, ParticipantState, toAnnounce, 
+                                   PeerRoots, pendingResync >>
+
+spdpSend(self) == spdp_send(self)
+
+net_step == /\ pc[[Type |-> "net", pID |-> 0]] = "net_step"
+            /\ \E m \in Messages : m.type \in {"spdp","ann","sreq"}
+            /\ \E m \in { x \in Messages : x.type \in {"spdp","ann","sreq"} }:
+                 IF m.type = "spdp"
+                    THEN /\ ParticipantState' = [ParticipantState EXCEPT ![m.dst].participants[m.src] = ApplySpdp(ParticipantState[m.dst].participants[m.src], m.disc, PeerRoots[m.dst][m.src] # m.rt)]
+                         /\ PeerRoots' = [PeerRoots EXCEPT ![m.dst][m.src] = m.rt]
+                         /\ Messages' = Messages \ {m}
+                    ELSE /\ IF m.type = "ann"
+                               THEN /\ ParticipantState' = [ParticipantState EXCEPT ![m.dst].endpoints = ParticipantState[m.dst].endpoints \cup {m.src}]
+                                    /\ Messages' = Messages \ {m}
+                               ELSE /\ Messages' = (        (Messages \ {m}) \cup
+                                                    { [type |-> "sresp", src |-> m.dst, dst |-> m.src, age |-> 0, disc |-> FALSE,
+                                                       rt |-> ParticipantState[m.dst].root,
+                                                       eps |-> IF m.rs THEN {} ELSE ParticipantState[m.dst].endpoints,
+                                                       view |-> IF m.rs THEN {} ELSE known(ParticipantState[m.dst]), rs |-> m.rs] })
+                                    /\ UNCHANGED ParticipantState
+                         /\ UNCHANGED PeerRoots
+            /\ pc' = [pc EXCEPT ![[Type |-> "net", pID |-> 0]] = "net_step"]
+            /\ UNCHANGED << Joined, toAnnounce, pendingResync >>
+
+net == net_step
+
+fsm_initial(self) == /\ pc[self] = "fsm_initial"
+                     /\    ~Overdue
+                        /\ (\/ newConfiguredParticipants(ParticipantState[self.pID]) # {}
+                            \/ newUnconfiguredParticipants(ParticipantState[self.pID]) # {})
+                     /\ IF newConfiguredParticipants(ParticipantState[self.pID]) # {}
+                           THEN /\ pc' = [pc EXCEPT ![self] = "fsm_reqgossip"]
+                                /\ UNCHANGED ParticipantState
+                           ELSE /\ ParticipantState' = [ParticipantState EXCEPT ![self.pID].participants = [q \in Participants |->
+                                                                                                               IF ParticipantState[self.pID].participants[q] = "newUnconf"
+                                                                                                               THEN "unconf"
+                                                                                                               ELSE ParticipantState[self.pID].participants[q]]]
+                                /\ pc' = [pc EXCEPT ![self] = "fsm_election"]
+                     /\ UNCHANGED << Joined, toAnnounce, PeerRoots, Messages, 
+                                     pendingResync >>
+
+fsm_reqgossip(self) == /\ pc[self] = "fsm_reqgossip"
+                       /\ IF validServers(self.pID) = {}
+                             THEN /\ pc' = [pc EXCEPT ![self] = "fsm_initial"]
+                                  /\ UNCHANGED Messages
+                             ELSE /\ ~Overdue /\ SedpCount < MaxInflight
+                                  /\ \E partner \in validServers(self.pID):
+                                       Messages' = (        Messages \cup
+                                                    { [type |-> "sreq", src |-> self.pID, dst |-> partner,
+                                                       age |-> 0, disc |-> FALSE, rt |-> 0, eps |-> {}, view |-> {}, rs |-> FALSE] })
+                                  /\ pc' = [pc EXCEPT ![self] = "fsm_await_resp"]
+                       /\ UNCHANGED << Joined, ParticipantState, toAnnounce, 
+                                       PeerRoots, pendingResync >>
+
+fsm_await_resp(self) == /\ pc[self] = "fsm_await_resp"
+                        /\ \E m \in Messages : m.type = "sresp" /\ m.dst = self.pID
+                        /\ \E m \in { x \in Messages : x.type = "sresp" /\ x.dst = self.pID }:
+                             /\ ParticipantState' = [ParticipantState EXCEPT ![self.pID] =                           [ParticipantState[self.pID] EXCEPT
+                                                                                           !.root        = IF m.rt < @ THEN m.rt ELSE @,
+                                                                                           !.endpoints   = @ \cup (({m.src} \cup m.eps) \ {self.pID}),
+                                                                                           !.participants = [q \in Participants |->
+                                                                                               IF q = m.src THEN "newConf"
+                                                                                               ELSE IF q \in m.view /\ ParticipantState[self.pID].participants[q] = "unknown"
+                                                                                                    THEN "unconf"
+                                                                                                    ELSE ParticipantState[self.pID].participants[q]]]]
+                             /\ PeerRoots' = [PeerRoots EXCEPT ![self.pID][m.src] = m.rt]
+                             /\ Messages' = Messages \ {m}
+                             /\ IF m.rs
+                                   THEN /\ pc' = [pc EXCEPT ![self] = "fsm_reconcile"]
+                                        /\ UNCHANGED toAnnounce
+                                   ELSE /\ toAnnounce' = [toAnnounce EXCEPT ![self.pID] = Joined \ {self.pID}]
+                                        /\ pc' = [pc EXCEPT ![self] = "fsm_announce"]
+                        /\ UNCHANGED << Joined, pendingResync >>
+
+fsm_reconcile(self) == /\ pc[self] = "fsm_reconcile"
+                       /\ ~Overdue
+                       /\ IF Complete(self.pID)
+                             THEN /\ pendingResync' = [pendingResync EXCEPT ![self.pID] = {}]
+                                  /\ pc' = [pc EXCEPT ![self] = "fsm_discovered"]
+                                  /\ UNCHANGED Messages
+                             ELSE /\ SedpCount < MaxInflight
+                                  /\ \E target \in holes(self.pID):
+                                       Messages' = (        Messages \cup
+                                                    { [type |-> "sreq", src |-> self.pID, dst |-> target,
+                                                       age |-> 0, disc |-> FALSE, rt |-> 0, eps |-> {}, view |-> {}, rs |-> TRUE] })
+                                  /\ pc' = [pc EXCEPT ![self] = "fsm_await_resp"]
+                                  /\ UNCHANGED pendingResync
+                       /\ UNCHANGED << Joined, ParticipantState, toAnnounce, 
+                                       PeerRoots >>
+
+fsm_announce(self) == /\ pc[self] = "fsm_announce"
+                      /\ IF toAnnounce[self.pID] = {}
+                            THEN /\ pc' = [pc EXCEPT ![self] = "fsm_reconcile"]
+                                 /\ UNCHANGED << toAnnounce, Messages >>
+                            ELSE /\ ~Overdue /\ SedpCount < MaxInflight
+                                 /\ \E dst \in toAnnounce[self.pID]:
+                                      /\ Messages' = (        Messages \cup
+                                                      { [type |-> "ann", src |-> self.pID, dst |-> dst, age |-> 0,
+                                                         disc |-> FALSE, rt |-> 0, eps |-> {}, view |-> {}] })
+                                      /\ toAnnounce' = [toAnnounce EXCEPT ![self.pID] = toAnnounce[self.pID] \ {dst}]
+                                 /\ pc' = [pc EXCEPT ![self] = "fsm_announce"]
+                      /\ UNCHANGED << Joined, ParticipantState, PeerRoots, 
+                                      pendingResync >>
+
+fsm_election(self) == /\ pc[self] = "fsm_election"
+                      /\ ~Overdue
+                      /\ IF newConfiguredParticipants(ParticipantState[self.pID]) # {}
+                            THEN /\ pc' = [pc EXCEPT ![self] = "fsm_reqgossip"]
+                                 /\ UNCHANGED << ParticipantState, toAnnounce >>
+                            ELSE /\ IF amLowest(ParticipantState[self.pID], self.pID)
+                                       THEN /\ ParticipantState' = [ParticipantState EXCEPT ![self.pID] = [ParticipantState[self.pID] EXCEPT !.root = self.pID]]
+                                            /\ toAnnounce' = [toAnnounce EXCEPT ![self.pID] = Joined \ {self.pID}]
+                                            /\ pc' = [pc EXCEPT ![self] = "fsm_announce"]
+                                       ELSE /\ pc' = [pc EXCEPT ![self] = "fsm_initial"]
+                                            /\ UNCHANGED << ParticipantState, 
+                                                            toAnnounce >>
+                      /\ UNCHANGED << Joined, PeerRoots, Messages, 
+                                      pendingResync >>
+
+fsm_discovered(self) == /\ pc[self] = "fsm_discovered"
+                        /\ ~Overdue /\ newConfiguredParticipants(ParticipantState[self.pID]) # {}
+                        /\ LET p == CHOOSE x \in newConfiguredParticipants(ParticipantState[self.pID]) :
+                                    \A y \in newConfiguredParticipants(ParticipantState[self.pID]) : x <= y IN
+                             IF PeerRoots[self.pID][p] # 0 /\ PeerRoots[self.pID][p] < ParticipantState[self.pID].root
+                                THEN /\ ParticipantState' = [ParticipantState EXCEPT ![self.pID] =                           [ParticipantState[self.pID] EXCEPT
+                                                                                                   !.root = PeerRoots[self.pID][p]]]
+                                     /\ toAnnounce' = [toAnnounce EXCEPT ![self.pID] = Joined \ {self.pID}]
+                                     /\ pc' = [pc EXCEPT ![self] = "fsm_announce"]
+                                     /\ UNCHANGED pendingResync
+                                ELSE /\ IF PeerRoots[self.pID][p] = ParticipantState[self.pID].root /\ ~hashOK(self.pID, p)
+                                           THEN /\ pendingResync' = [pendingResync EXCEPT ![self.pID] = pendingResync[self.pID] \cup {p}]
+                                                /\ pc' = [pc EXCEPT ![self] = "fsm_reconcile"]
+                                                /\ UNCHANGED ParticipantState
+                                           ELSE /\ ParticipantState' = [ParticipantState EXCEPT ![self.pID].participants[p] = "conf"]
+                                                /\ pc' = [pc EXCEPT ![self] = "fsm_discovered"]
+                                                /\ UNCHANGED pendingResync
+                                     /\ UNCHANGED toAnnounce
+                        /\ UNCHANGED << Joined, PeerRoots, Messages >>
+
+sedpFsm(self) == fsm_initial(self) \/ fsm_reqgossip(self)
+                    \/ fsm_await_resp(self) \/ fsm_reconcile(self)
+                    \/ fsm_announce(self) \/ fsm_election(self)
+                    \/ fsm_discovered(self)
+
+(* Allow infinite stuttering to prevent deadlock on termination. *)
+Terminating == /\ \A self \in ProcSet: pc[self] = "Done"
+               /\ UNCHANGED vars
+
+Next == joiner \/ net
+           \/ (\E self \in SpdpProcs: spdpSend(self))
+           \/ (\E self \in SedpProcs: sedpFsm(self))
+           \/ Terminating
+
+Spec == /\ Init /\ [][Next]_vars
+        /\ WF_vars(joiner)
+        /\ \A self \in SpdpProcs : SF_vars(spdpSend(self))
+        /\ WF_vars(net)
+        /\ \A self \in SedpProcs : SF_vars(sedpFsm(self))
+
+Termination == <>(\A self \in ProcSet: pc[self] = "Done")
+
+\* END TRANSLATION
 
 \* Model constraint, discussed in 4.2, bounds the state space if all participants are configured,
 \* all known, nothing of interest happens anymore and TLC should not explore the trace further
 ModelConstraint ==
     \/ Messages # {}
+    \/ \E p, q \in Participants : ParticipantState[p].root # ParticipantState[q].root
     \/ \E p \in Participants : ParticipantState[p].endpoints # Participants \ {p}
     \/ \E p \in Participants :
          \/ ~isDiscovered(p)
